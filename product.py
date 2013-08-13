@@ -45,41 +45,32 @@ class product_product(osv.osv):
 	for currency in currency_obj.browse(cr,uid,currency_id):
 		currency_rate = currency.rate
 
-	product_ids = product_obj.search(cr,uid,[('id','>',0)])
-	
-	import pdb;pdb.set_trace()	
+	product_ids = product_obj.search(cr,uid,[('id','>',0),('cost_method','=','last_purchase_usd')])
+
+	max_date = 0	
 	for product in product_obj.browse(cr,uid,product_ids):
 		invoice_line_ids = invoice_line_obj.search(cr,uid,[('product_id','=',product.id)])
 		for invoice_line in invoice_line_obj.browse(cr,uid,invoice_line_ids):
-			if invoice_line.invoice_id.currency_id.id == currency_id[0]:
-				price_unit_usd = invoice_line.price_unit * currency_rate
-	
-				vals_product = {
-					'standard_price': price_unit_usd
-					}
-				return_id = product_obj.write(cr,uid,product.id,vals_product)
-				_logger.debug("Updated product " + product.name)
+			if invoice_line.invoice_id.state in ('paid','open') \
+				and invoice_line.invoice_id.date_invoice > max_date:
+				if invoice_line.invoice_id.currency_id.id == currency_id[0]:
+					price_unit_usd = invoice_line.price_unit * currency_rate
+		
+					vals_product = {
+						'standard_price': price_unit_usd
+						}
+					return_id = product_obj.write(cr,uid,product.id,vals_product)
+					_logger.debug("Updated product " + product.name)
 			
-		"""
-		if product.bom_ids == []:
-			vals_cost = {
-				'product_id': product.id,
-				'date': datetime.today(),
-				'name': product.name,
-				'cost': product.standard_price,
-				}
-			product_cost_history_ids = product_cost_history_obj.create(cr,uid,vals_cost)
-		else:
-			for bom in self.pool.get('mrp.bom').browse(cr,uid,product.bom_ids):
-				vals_cost = {
-					'product_id': product.id,
-					'date': datetime.today(),
-					'name': bom.id.name,
-					'cost': bom.id.manufacturing_cost,
-					}
-				product_cost_history_ids = product_cost_history_obj.create(cr,uid,vals_cost)
-		"""
 	return None
+
+    _columns = {
+	        'cost_method': fields.selection([('standard','Standard Price'), 
+						('average','Average Price'),
+						('last_purchase_usd','Last Purchase in USD')],
+						 'Costing Method', required=True,
+						help="Standard Price: The cost price is manually updated at the end of a specific period (usually every year). \nAverage Price: The cost price is recomputed at each incoming shipment."),
+		}
 
 product_product()
 
